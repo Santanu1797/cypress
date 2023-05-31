@@ -1,0 +1,136 @@
+# Maven based Java Web Application Project to deploy on Linux VM
+# springboot-petclinic
+
+trigger:
+- none
+
+# variables:
+
+  # Azure Resource Manager connection created during pipeline creation
+  # azureSubscription: '2faa1d53-3e83-4e77-bbf1-c4d758ab4dfa'
+
+stages:
+- stage: CIBuild
+  displayName: Maven CI Build
+  jobs:
+  - job: MavenPackageAndPublishArtifacts
+    displayName: Maven Package and Publish Artifacts
+    pool:
+      name: 'devops-sonarqube'
+
+    steps:
+    - task: SonarQubePrepare@5
+      displayName: Prepare SonarQube Analysis
+      inputs:
+        SonarQube: 'S2Demo-SonarQube'
+        scannerMode: 'Other'
+        extraProperties: |
+          # Additional properties that will be passed to the scanner,
+          # Put one key=value per line, example:
+          # sonar.exclusions=**/*.bin
+          sonar.projectKey=S2Demo-AzureWarmup_S2Demo-SpringBoot-Petclinic
+
+    - task: Maven@3
+      displayName: 'Maven Build Package'
+      inputs:
+        mavenPomFile: 'pom.xml'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        javaHomeOption: 'JDKVersion'
+        mavenVersionOption: 'Default'
+        mavenAuthenticateFeed: false
+        effectivePomSkip: false
+        sonarQubeRunAnalysis: true
+        sqMavenPluginVersionChoice: 'latest'
+
+    - task: SonarQubePublish@5
+      displayName: Publish Quality Gate
+      inputs:
+        pollingTimeoutSec: '300'
+
+    - task: CopyFiles@2
+      displayName: 'Copy Files to artifact staging directory'
+      inputs:
+        SourceFolder: '$(System.DefaultWorkingDirectory)'
+        Contents: '**/target/*.?(war|jar)'
+        TargetFolder: $(Build.ArtifactStagingDirectory)
+        OverWrite: true
+
+    - task: dependency-check-build-task@6
+      displayName: OWASP Dependency Check
+      enabled: true
+      inputs:
+        projectName: 'S2Demo-SpringBoot-Petclinic'
+        scanPath: '**/*.jar'
+        format: 'HTML, JUNIT'
+        additionalArguments: '--disableOssIndex'
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Pipeline.Workspace)'
+        artifact: 'drop'
+        publishLocation: 'pipeline'
+
+    - task: Docker@2
+      displayName: Docker Build & Push
+      enabled: false
+      inputs:
+        containerRegistry: 'S2Demo-ACR'
+        repository: 's2demo-petclinic'
+        command: 'buildAndPush'
+        Dockerfile: '**/Dockerfile'
+
+    - task: Bash@3
+      displayName: Run Trivy Scan
+      enabled: false
+      inputs:
+        targetType: inline
+        script: >-
+          sudo curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+          trivy --version
+          trivy image --light --severity LOW,MEDIUM azuregitopspocarc.azurecr.io/ezio-sample-java:latest
+          trivy image --severity LOW,MEDIUM --format template --template "@trivy/junit.tpl" -o junit-report-low-med.xml azuregitopspocarc.azurecr.io/ezio-sample-java:latest
+
+    - task: PublishTestResults@2
+      displayName: Publish Trivy Results
+      enabled: false
+      inputs:
+        testResultsFiles: '**/junit-report-low-med.xml'
+        mergeTestResults: true
+        testRunTitle: Trivy - Low and Midium Vulnerabilities
+
+
+# Deploy to Azure VM on Tomcat Server
+
+- stage: DeployToVM
+  displayName: Deployment in LinuxVM
+  dependsOn: CIBuild
+  condition: succeeded()
+  jobs:
+  - deployment: DeploymentToVM
+    displayName: Deploy using Ansible
+    environment: 'dev'
+    pool:
+      name: 'devops-sonarqube'
+      workspace:
+        clean: all
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Ansible@0
+            inputs:
+              ansibleInterface: 'agentMachine'
+              playbookPathOnAgentMachine: '$(System.DefaultWorkingDirectory)/yaml-workflow/ansible-tomcat-setup.yml'
+              inventoriesAgentMachine: 'hostList'
+              inventoryHostListAgentMachine: '172.16.0.9'
+              args: '-v'
+
+#           - task: Bash@3
+#             inputs:
+#               targetType: 'inline'
+#               script: |
+#                 echo "Source Code Path --> "$(Build.SourcesDirectory)
+#                 echo "Artifact Staging Path --> "$(build.artifactstagingdirectory)
+#                 echo "Pipeline WorkSpace Path --> "$(Pipeline.Workspace)
+#                 sudo find $(Pipeline.Workspace)/drop/ -iname *.war -exec cp {} /opt/apache-tomcat-9.0.56/webapps/ \;

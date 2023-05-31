@@ -1,0 +1,35 @@
+---
+- name: Install Tomcat9 Server
+  hosts: 172.16.0.9
+  become: true
+
+  tasks:
+    - name: Only run "update_cache=yes" if the last one is more than 3600 seconds ago
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Tomcat dependent packages for Ubuntu
+      apt:
+        name: "{{ packages }}"
+        state: latest
+      vars:
+        packages:
+          - openjdk-8-jdk
+          - tomcat9
+
+    - name: Make sure a service is running
+      systemd:
+        state: started    #"state: stopped" for stopping Tomcat service
+        enabled: true
+        name: tomcat9
+
+    - name: Move WAR from Workspace to Tomcat Server
+      copy:
+        src: "{{ item }}"
+        dest: "/var/lib/tomcat9/webapps"
+      with_fileglob: "../../drop/a/target/*.war"
+
+
+    # - name: Move WAR from Workspace to Tomcat Server
+    #   synchronize: src=/home/azureuser/myagent/_work/4/drop/a/target/*.war dest=/var/lib/tomcat9/webapps

@@ -1,0 +1,18 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "environment": {
+            "value": "dev"
+        },
+        "region": {
+            "value": "weu"
+        },
+        "vm_size": {
+            "value": "Standard_D2s_v3"
+        },
+        "virtualNetworkId": {
+            "value": "/subscriptions/2faa1d53-3e83-4e77-bbf1-c4d758ab4dfa/resourceGroups/RG_PREMI0096094_WEU/providers/Microsoft.Network/virtualNetworks/VNET-PREMI0096094-WEU"
+        }
+    }
+}

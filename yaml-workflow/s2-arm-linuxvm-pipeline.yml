@@ -1,0 +1,109 @@
+parameters:
+- name: envName
+  displayName: 'Environment'
+  type: string
+  default: dev
+  values:
+  - dev
+  - qa
+  - prd
+
+- name: regionName
+  displayName: 'Region'
+  type: string
+  default: weu
+  values:
+  - weu
+  - emea
+
+- name: applicationName
+  displayName: 'Application'
+  type: string
+  default: s2-usecase1a-Arm
+  values:
+  - s2-usecase1a-Arm
+  - s2-usecase1b-Arm
+
+- name: serviceConnection
+  displayName: 'Service connection'
+  type: string
+  default: RG_PREMI0096094_WEU-SPN
+  values:
+  - RG_PREMI0096094_WEU-SPN         # Replace with your own Service Principal Name
+  - ResourceGroupName-prod-spn
+
+trigger: none
+#trigger:
+#- master
+
+variables:
+  environmentName: ${{parameters.envName}}
+  ${{ if eq(lower(parameters.regionName), 'weu') }}:  
+    location: 'westeurope'
+  ${{ if eq(lower(parameters.regionName), 'emea') }}:  
+    location: 'centralfrance' 
+  region: ${{parameters.regionName}}
+  serviceName: ${{parameters.applicationName}}
+  azureSubscription: ${{parameters.serviceConnection}}            # Azure Resource Manager connection created during pipeline creation
+  vmImageName: 'ubuntu-latest'                                    # Agent VM image name
+  rgName: 'RG_PREMI0096094_WEU'                                   # resource group name  ---> Replace with your own ResourceGroupName
+  rgLocation: '$(location)'                                       # resource group location
+  deployMode: 'Incremental'                                       # Options: Incremental, Complete, Validation
+
+
+stages:
+- stage: CreateArtifacts
+  displayName: Build artifacts
+  jobs:
+  - job: CopyFiles
+    displayName: Copy files for deployment
+    pool:
+      vmImage: $(vmImageName)
+
+    steps:
+    - task: CopyFiles@2
+      displayName: 'Copy ARM templates files to artifact staging directory'
+      inputs:
+        SourceFolder: '$(System.DefaultWorkingDirectory)'
+        Contents: '**/arm-templates/*.?(json)'
+        TargetFolder: $(Build.ArtifactStagingDirectory)
+
+    - upload: $(Build.ArtifactStagingDirectory)
+      artifact: drop
+
+- stage: Deploy
+  displayName: ARM deployment
+  jobs:
+  - job: BashCmd
+    displayName: Bash command
+    pool:
+      vmImage: $(vmImageName)
+
+    steps:
+    - bash: |
+        echo 'Pipeline.Workspace:' $(Pipeline.Workspace)
+      displayName: 'Display Path'
+
+  # If the primary intent of your job is to deploy your app (as opposed to build or test your app), then you can use a special type of job called deployment job.
+
+  - deployment: resourceGroup
+    displayName: Resource group deployment
+    environment: $(environmentName)
+    pool:
+      vmImage: $(vmImageName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureResourceGroupDeployment@2
+            displayName: 'ARM template deployment'
+            inputs:
+              azureSubscription: $(azureSubscription)
+              action: 'Create Or Update Resource Group'
+              resourceGroupName: $(rgName)
+              location: $(rgLocation)
+              templateLocation: 'Linked artifact'
+              csmFile: '$(Pipeline.Workspace)/drop/**/arm-templates/s2_arm_infra.json' 
+              csmParametersFile: '$(Pipeline.Workspace)/drop/**/arm-templates/s2_arm_infra_parameters.json'
+              overrideParameters: '-environment $(environmentName) -region $(region)' 
+              deploymentMode: '$(deployMode)'

@@ -1,0 +1,246 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "environment": {
+            "defaultValue": "dev",
+            "type": "String"
+        },
+        "region":{
+            "defaultValue": "weu",
+            "type": "String"
+        },
+        "vm_size": {
+            "defaultValue": "Standard_D2s_v3",
+            "type": "String"
+        },
+        "virtualNetworkId": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "vnet_type": "VNET-PREMI0096094-WEU",
+        "subnet": "VNET-PREMI0096094-Subnet-WEU",
+        "nsg_type": "VM-PREMI0096094-NSG",
+        "vm_type": "linux",
+        "sshPublicKeys_type": "sshk",
+        "nic_type": "nic",
+        "publicIp_type" : "ip",
+        "disk_type": "disk",
+        "appName": "s2demo",
+        "version" : "001",
+        "resource_name_suffix" : "[concat('-',variables('appName'),'-',parameters('region'),'-')]",
+        "location": "[resourceGroup().location]",
+        "virtualMachine_name": "[concat(parameters('environment'),'-',variables('vm_type'), variables('resource_name_suffix'), 'arm01')]",
+        "vmUserName": "azureuser",
+        "publickey_value" : "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKcxSdCQLZ9k7NEki3sgMls5Ls\r\nu/6Xpmn1CAY2TYFRnGwMu7EjPA048o/ONtJDPnQGbz0zv7BzOSnEDcjz3/GzQ0Cg\r\nAsuziQAgVl8lV1l7BNPJ2eCPUo9s3i48Krk0p1mkXKRVp3e7BAfwFAcI455sjdvn\r\nbUDB/OBDKFfvHxGual7Oiocp2YmjY6txg8qrfHo1lFIO0MKx1qEVUIWHDn+nxJ0W\r\ntyxzGWvr5EC52ImYYphfJmyM0YB8K3rIORdMPLPUmZB2jO26uP8A2NNaXVNSz6pt\r\nS6dLl7SH9+rXRS4KpxdwkkvqogOy/Wxzx5nIita3Okn2WounJ9wxkRvnsSEoZ7IB\r\nwXVDWrU2xIoA2iz54lPpixsgkzDmxYjiZXiDFTINmnq6k4OaftosvzztWNAmlDW9\r\nYzj10o0BFKkfQAyyAvVnbqXDfM8/eToK6B2OEDyhsv/tp+TS4Aiw9ZyWlaicTuYV\r\nfvD4kPZHoj1VOtZO036vGrdFEffa6c4eyi31ZEE= generated-by-azure\r\n",
+        "sshPublicKey_name": "[concat(variables('sshPublicKeys_type'), variables('resource_name_suffix'), 'arm01')]",
+        "networkInterface_name": "[concat(variables('nic_type'), variables('resource_name_suffix'), 'arm01')]",
+        "networkSecurityGroup_name": "[concat(variables('nsg_type'))]",
+        "publicIPAddresse_name": "[concat(variables('publicIp_type'), variables('resource_name_suffix'), 'arm01')]",
+        "virtualNetwork_name": "[concat(variables('vnet_type'))]",
+        "subnet_name": "[concat(variables('subnet'))]",
+        "osdisk_name": "[concat('os',variables('disk_type'), variables('resource_name_suffix'), 'arm01')]",
+        "vnetId": "[parameters('virtualNetworkId')]",
+        "subnetRef": "[concat(variables('vnetId'), '/subnets/', variables('subnet_name'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Compute/sshPublicKeys",
+            "apiVersion": "2021-11-01",
+            "name": "[variables('sshPublicKey_name')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "publicKey": "[variables('publickey_value')]"
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2020-11-01",
+            "name": "[variables('networkSecurityGroup_name')]",
+            "location": "[variables('location')]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "Allow_SSH",
+                        "properties": {
+                            "protocol": "TCP",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "22",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "VirtualNetwork",
+                            "access": "Allow",
+                            "priority": 300,
+                            "direction": "Inbound",
+                            "sourcePortRanges": [],
+                            "destinationPortRanges": [],
+                            "sourceAddressPrefixes": [],
+                            "destinationAddressPrefixes": []
+                        }
+                    },
+                    {
+                        "name": "Allow_RDP",
+                        "properties": {
+                            "protocol": "TCP",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "3389",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "VirtualNetwork",
+                            "access": "Allow",
+                            "priority": 301,
+                            "direction": "Inbound",
+                            "sourcePortRanges": [],
+                            "destinationPortRanges": [],
+                            "sourceAddressPrefixes": [],
+                            "destinationAddressPrefixes": []
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2020-11-01",
+            "name": "[variables('publicIPAddresse_name')]",
+            "location": "[variables('location')]",
+            "sku": {
+                "name": "Basic",
+                "tier": "Regional"
+            },
+            "properties": {
+                "ipAddress": "20.111.53.225",
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Dynamic",
+                "idleTimeoutInMinutes": 4,
+                "ipTags": []
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2021-11-01",
+            "name": "[variables('virtualMachine_name')]",
+            "location": "[variables('location')]",
+            "tags": {
+                "GROUPIT_Compliancy_Eracent": "1",
+                "GROUPIT_Security_Compliancy": "compliant",
+                "GROUPIT_Compliancy_Crowdstrike": "1",
+                "GROUPIT_Compliancy_Qualys": "1"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterface_name'))]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vm_size')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "canonical",
+                        "offer": "0001-com-ubuntu-server-focal",
+                        "sku": "20_04-lts-gen2",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "osType": "Linux",
+                        "name": "[variables('osdisk_name')]",
+                        "createOption": "FromImage",
+                        "caching": "ReadWrite",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        },
+                        "deleteOption": "Delete",
+                        "diskSizeGB": 30
+                    },
+                    "dataDisks": []
+                },
+                "osProfile": {
+                    "computerName": "[variables('virtualMachine_name')]",
+                    "adminUsername": "[variables('vmUserName')]",
+                    "linuxConfiguration": {
+                        "disablePasswordAuthentication": true,
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/',variables('vmUserName'),'/.ssh/authorized_keys')]",
+                                    "keyData": "[variables('publickey_value')]"
+                                }
+                            ]
+                        },
+                        "provisionVMAgent": true,
+                        "patchSettings": {
+                            "patchMode": "ImageDefault",
+                            "assessmentMode": "ImageDefault"
+                        }
+                    },
+                    "secrets": [],
+                    "allowExtensionOperations": true
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('networkInterface_name'))]",
+                            "properties": {
+                                "deleteOption": "Detach"
+                            }
+                        }
+                    ]
+                },
+                "diagnosticsProfile": {
+                    "bootDiagnostics": {
+                        "enabled": true
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2020-11-01",
+            "name": "[variables('networkInterface_name')]",
+            "location": "[variables('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddresse_name'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "subnet": {
+                                "id": "[variables('subnetRef')]"
+                            },
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPAddresse_name'))]"
+                            },
+                            "primary": true,
+                            "privateIPAddressVersion": "IPv4"
+                        }
+                    }
+                ],
+                "dnsSettings": {
+                    "dnsServers": []
+                },
+                "enableAcceleratedNetworking": true,
+                "enableIPForwarding": false,
+                "networkSecurityGroup": {
+                    "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroup_name'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines/extensions",
+            "apiVersion": "2021-11-01",
+            "name": "[concat(variables('virtualMachine_name'), '/AzureNetworkWatcherExtension')]",
+            "location": "westeurope",
+            "dependsOn": [
+                "[resourceId('Microsoft.Compute/virtualMachines', variables('virtualMachine_name'))]"
+            ],
+            "properties": {
+                "autoUpgradeMinorVersion": true,
+                "publisher": "Microsoft.Azure.NetworkWatcher",
+                "type": "NetworkWatcherAgentLinux",
+                "typeHandlerVersion": "1.4"
+            }
+        }
+    ]
+}
