@@ -1,6 +1,6 @@
 {
   "name": "cypresstest",
-  "version": "1.0.0",
+  "version": "1.221.0",
   "description": "Automation Testing",
   "main": "index.js",
   "scripts": {
